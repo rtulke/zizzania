@@ -7,8 +7,11 @@
  * from the packet dissector and maintains a hash table of target clients.
  */
 
-#include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -43,7 +46,63 @@ struct zz_target {
     time_t schedule;             /* When to send next deauth (Unix timestamp) */
     unsigned attempts;           /* Remaining deauth attempts before giving up */
     UT_hash_handle hh;           /* uthash handle */
+    struct zz_target *next_free; /* Pool free list linkage */
 };
+
+struct zz_target_pool_chunk {
+    struct zz_target nodes[ZZ_TARGET_POOL_CHUNK];
+    struct zz_target_pool_chunk *next;
+};
+
+static int target_pool_grow(zz_handler *zz, zz_killer *killer) {
+    struct zz_target_pool_chunk *chunk;
+    size_t i;
+
+    chunk = malloc(sizeof(*chunk));
+    if (!chunk) {
+        zz_error(zz, "Cannot grow killer target pool: %s", strerror(errno));
+        return 0;
+    }
+
+    chunk->next = killer->target_pool.chunks;
+    killer->target_pool.chunks = chunk;
+
+    for (i = 0; i < ZZ_TARGET_POOL_CHUNK; i++) {
+        chunk->nodes[i].next_free = killer->target_pool.free_list;
+        killer->target_pool.free_list = &chunk->nodes[i];
+    }
+
+    return 1;
+}
+
+static struct zz_target *target_pool_acquire(zz_handler *zz, zz_killer *killer) {
+    if (!killer->target_pool.free_list) {
+        if (!target_pool_grow(zz, killer)) {
+            return NULL;
+        }
+    }
+
+    struct zz_target *target = killer->target_pool.free_list;
+    killer->target_pool.free_list = target->next_free;
+    memset(target, 0, sizeof(*target));
+    return target;
+}
+
+static void target_pool_release(zz_killer *killer, struct zz_target *target) {
+    target->next_free = killer->target_pool.free_list;
+    killer->target_pool.free_list = target;
+}
+
+static void target_pool_destroy(zz_killer *killer) {
+    struct zz_target_pool_chunk *chunk = killer->target_pool.chunks;
+    while (chunk) {
+        struct zz_target_pool_chunk *next = chunk->next;
+        free(chunk);
+        chunk = next;
+    }
+    killer->target_pool.chunks = NULL;
+    killer->target_pool.free_list = NULL;
+}
 
 /*
  * Add or update a target in the killer's target list.
@@ -55,8 +114,8 @@ struct zz_target {
  *   killer - Killer subsystem
  *   target - Target information (station, bssid, schedule)
  */
-static void set_target(zz_handler *zz, zz_killer *killer,
-                       const struct zz_target *target) {
+static int set_target(zz_handler *zz, zz_killer *killer,
+                      const struct zz_target *target) {
     struct zz_target *tmp;
 
     /* Try to find existing target using (station, bssid) as composite key */
@@ -64,8 +123,10 @@ static void set_target(zz_handler *zz, zz_killer *killer,
 
     if (tmp == NULL) {
         /* New target - create and add to hash table */
-        tmp = malloc(sizeof(struct zz_target));
-        assert(tmp != NULL);
+        tmp = target_pool_acquire(zz, killer);
+        if (tmp == NULL) {
+            return 0;
+        }
         *tmp = *target;
         HASH_ADD(hh, killer->targets, station, 2 * sizeof(zz_mac_addr), tmp);
 
@@ -79,6 +140,7 @@ static void set_target(zz_handler *zz, zz_killer *killer,
 
     /* Reset/set the maximum number of deauth attempts */
     tmp->attempts = zz->setup.killer_max_attempts;
+    return 1;
 }
 
 /*
@@ -94,11 +156,13 @@ static void del_target(zz_killer *killer, const struct zz_target *target) {
 
     /* Look up the target */
     HASH_FIND(hh, killer->targets, &target->station, 2 * sizeof(zz_mac_addr), tmp);
-    assert(tmp != NULL);
+    if (tmp == NULL) {
+        return;
+    }
 
     /* Delete it from the hash table and free memory */
     HASH_DEL(killer->targets, tmp);
-    free(tmp);
+    target_pool_release(killer, tmp);
 }
 
 /*
@@ -171,15 +235,50 @@ static int kill_target(zz_handler *zz, struct zz_target *target) {
  * Parameters:
  *   killer - Killer structure to initialize
  */
-void zz_killer_new(zz_killer *killer) {
+int zz_killer_new(zz_handler *zz, zz_killer *killer) {
+    int pthread_error;
+
     killer->targets = NULL;  /* Empty hash table */
+    killer->pipe[0] = killer->pipe[1] = -1;
+    killer->target_pool.chunks = NULL;
+    killer->target_pool.free_list = NULL;
 
     /* Create a non-blocking pipe for inter-thread communication.
      * The dissector writes messages (add/remove targets), and the
      * killer reads them during periodic runs. */
-    assert(pipe(killer->pipe) == 0);
-    assert(fcntl(killer->pipe[0], F_SETFL, O_NONBLOCK) == 0);  /* Non-blocking reads */
-    assert(fcntl(killer->pipe[1], F_SETFL, O_NONBLOCK) == 0);  /* Non-blocking writes */
+    if (pipe(killer->pipe) == -1) {
+        zz_error(zz, "Cannot create killer pipe: %s", strerror(errno));
+        return 0;
+    }
+    if (fcntl(killer->pipe[0], F_SETFL, O_NONBLOCK) == -1) {
+        zz_error(zz, "Cannot configure killer pipe read end: %s", strerror(errno));
+        close(killer->pipe[0]);
+        close(killer->pipe[1]);
+        return 0;
+    }
+    if (fcntl(killer->pipe[1], F_SETFL, O_NONBLOCK) == -1) {
+        zz_error(zz, "Cannot configure killer pipe write end: %s", strerror(errno));
+        close(killer->pipe[0]);
+        close(killer->pipe[1]);
+        return 0;
+    }
+
+    pthread_error = pthread_mutex_init(&killer->pipe_lock, NULL);
+    if (pthread_error != 0) {
+        zz_error(zz, "Cannot initialize killer pipe lock: %s", strerror(pthread_error));
+        close(killer->pipe[0]);
+        close(killer->pipe[1]);
+        return 0;
+    }
+
+    if (!target_pool_grow(zz, killer)) {
+        pthread_mutex_destroy(&killer->pipe_lock);
+        close(killer->pipe[0]);
+        close(killer->pipe[1]);
+        return 0;
+    }
+
+    return 1;
 }
 
 /*
@@ -193,19 +292,54 @@ void zz_killer_new(zz_killer *killer) {
  *   bssid - Access point BSSID
  *   outcome - Packet processing outcome (indicates why client should be tracked)
  */
-void zz_killer_post_message(zz_killer *killer,
-                            zz_mac_addr station, zz_mac_addr bssid,
-                            zz_packet_outcome outcome) {
+int zz_killer_post_message(zz_handler *zz, zz_killer *killer,
+                           zz_mac_addr station, zz_mac_addr bssid,
+                           zz_packet_outcome outcome) {
     struct message message = {0};
+    ssize_t written;
+    int pthread_error;
+    int result = 1;
 
     /* Prepare the message */
     message.station = station;
     message.bssid = bssid;
     message.outcome = outcome;
 
-    /* Write to pipe (non-blocking, should never block since pipe is large enough) */
-    assert(write(killer->pipe[1], &message,
-           sizeof(struct message)) == sizeof(struct message));
+    pthread_error = pthread_mutex_lock(&killer->pipe_lock);
+    if (pthread_error != 0) {
+        zz_error(zz, "Cannot lock killer pipe: %s", strerror(pthread_error));
+        return 0;
+    }
+
+    /* Write to pipe (non-blocking). Drop gracefully if pipe is full. */
+    written = write(killer->pipe[1], &message, sizeof(struct message));
+    if (written == (ssize_t)sizeof(struct message)) {
+        goto unlock;
+    }
+
+    if (written == -1 && errno == EAGAIN) {
+        char station_str[ZZ_MAC_ADDR_STRING_SIZE];
+        char bssid_str[ZZ_MAC_ADDR_STRING_SIZE];
+
+        zz_mac_addr_sprint(station_str, station);
+        zz_mac_addr_sprint(bssid_str, bssid);
+        zz_log("Killer pipe is full; dropping message for %s @ %s",
+               station_str, bssid_str);
+        zz->killer_pipe_drops++;
+        goto unlock;
+    }
+
+    zz_error(zz, "Cannot notify killer: %s", strerror(errno));
+    result = 0;
+
+unlock:
+    pthread_error = pthread_mutex_unlock(&killer->pipe_lock);
+    if (pthread_error != 0) {
+        zz_error(zz, "Cannot unlock killer pipe: %s", strerror(pthread_error));
+        result = 0;
+    }
+
+    return result;
 }
 
 /*
@@ -226,8 +360,16 @@ int zz_killer_run(zz_handler *zz, zz_killer *killer) {
     struct message message;
     struct zz_target *tmp, *iterator;
     time_t now;
+    int pthread_error;
+    int result = 1;
 
     /* Phase 1: Drain the message pipe and update target list */
+    pthread_error = pthread_mutex_lock(&killer->pipe_lock);
+    if (pthread_error != 0) {
+        zz_error(zz, "Cannot lock killer pipe: %s", strerror(pthread_error));
+        return 0;
+    }
+
     while (read(killer->pipe[0], &message,
            sizeof(struct message)) == sizeof(struct message)) {
         struct zz_target target = {0};
@@ -246,12 +388,25 @@ int zz_killer_run(zz_handler *zz, zz_killer *killer) {
                 target.schedule += ZZ_KILLER_GRACE_TIME;
             }
 
-            set_target(zz, killer, &target);
+            if (!set_target(zz, killer, &target)) {
+                result = 0;
+                break;
+            }
         }
         /* Remove target: handshake captured successfully */
         else if (message.outcome.got_handshake) {
             del_target(killer, &target);
         }
+    }
+
+    pthread_error = pthread_mutex_unlock(&killer->pipe_lock);
+    if (pthread_error != 0) {
+        zz_error(zz, "Cannot unlock killer pipe: %s", strerror(pthread_error));
+        return 0;
+    }
+
+    if (!result) {
+        return 0;
     }
 
     /* Phase 2: Scan target list and perform scheduled deauthentications */
@@ -295,16 +450,28 @@ int zz_killer_run(zz_handler *zz, zz_killer *killer) {
  * Parameters:
  *   killer - Killer subsystem to free
  */
-void zz_killer_free(zz_killer *killer) {
+void zz_killer_free(zz_handler *zz, zz_killer *killer) {
     struct zz_target *tmp, *target;
+    int pthread_error;
 
     /* Close the pipe */
-    assert(close(killer->pipe[0]) == 0);
-    assert(close(killer->pipe[1]) == 0);
+    if (close(killer->pipe[0]) == -1) {
+        zz_log("Cannot close killer pipe (read end): %s", strerror(errno));
+    }
+    if (close(killer->pipe[1]) == -1) {
+        zz_log("Cannot close killer pipe (write end): %s", strerror(errno));
+    }
 
     /* Free all targets from the hash table */
     HASH_ITER(hh, killer->targets, target, tmp) {
         HASH_DEL(killer->targets, target);
-        free(target);
+        target_pool_release(killer, target);
     }
+
+    pthread_error = pthread_mutex_destroy(&killer->pipe_lock);
+    if (pthread_error != 0) {
+        zz_log("Cannot destroy killer pipe lock: %s", strerror(pthread_error));
+    }
+
+    target_pool_destroy(killer);
 }

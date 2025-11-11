@@ -78,7 +78,7 @@ zz_packet_outcome zz_process_packet(zz_handler *zz,
  *   bssid - Access point MAC address
  *   outcome - Packet outcome indicating why client should be tracked
  */
-void zz_killer_post_message(zz_killer *killer,
+int zz_killer_post_message(zz_handler *zz, zz_killer *killer,
                             zz_mac_addr station, zz_mac_addr bssid,
                             zz_packet_outcome outcome);
 #endif

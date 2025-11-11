@@ -29,7 +29,7 @@
  *   - Deauthentication attack state (killer)
  *   - Error reporting (error_buffer)
  */
-typedef struct {
+typedef struct zz_handler {
     /* Configuration and command-line options */
     struct {
         char *input;                      /* Input file path (NULL for live capture) */
@@ -61,8 +61,12 @@ typedef struct {
 
     zz_bsss bsss;       /* Hash table of tracked access points (BSSs) */
     zz_clients clients; /* Hash table of tracked client stations */
+    zz_bss_pool bss_pool;     /* Memory pool for BSS records */
+    zz_client_pool client_pool; /* Memory pool for client records */
     zz_killer killer;   /* Deauthentication attack subsystem */
+    unsigned long killer_pipe_drops; /* Number of killer pipe messages dropped (EAGAIN) */
 
+    unsigned killer_initialized:1; /* Killer subsystem successfully initialized */
     unsigned is_done:1; /* Flag to signal shutdown */
 
     char error_buffer[ZZ_ERROR_BUFFER_SIZE]; /* Error message storage */

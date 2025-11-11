@@ -35,7 +35,7 @@ int zz_set_channel(zz_handler *zz) {
 
 /* Linux implementation */
 
-#include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,8 +89,10 @@ int zz_set_channel(zz_handler *zz) {
     int fd;
 
     /* Sanity checks: must be live capture with valid channel */
-    assert(zz->setup.is_live);
-    assert(zz->setup.channel > 0);
+    if (!zz->setup.is_live || zz->setup.channel <= 0) {
+        errno = EINVAL;
+        return 0;
+    }
 
     /* Open a socket for ioctl communication */
     fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -99,7 +101,11 @@ int zz_set_channel(zz_handler *zz) {
     }
 
     /* Set the channel and return the result */
-    return iwreq_freq(fd, zz->setup.input, zz->setup.channel);
+    {
+        int result = iwreq_freq(fd, zz->setup.input, zz->setup.channel);
+        close(fd);
+        return result;
+    }
 }
 
 #endif

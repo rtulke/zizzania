@@ -20,13 +20,13 @@ typedef struct zz_device *zz_members;
 void zz_members_new(zz_members *members);
 
 /* Add a MAC address to the set (exact match only)
- * Returns: 1 on success, 0 on failure */
+ * Returns: 1 when added, 0 if it already exists, -1 on allocation failure */
 int zz_members_put(zz_members *members, zz_mac_addr mac_addr);
 
 /* Add a MAC address with a subnet mask to the set (allows matching ranges)
  * Example: mac_addr=00:11:22:00:00:00, mac_mask=ff:ff:ff:00:00:00
  *          will match all addresses starting with 00:11:22
- * Returns: 1 on success, 0 on failure */
+ * Returns: 1 when added, 0 if it already exists, -1 on allocation failure */
 int zz_members_put_mask(zz_members *members, zz_mac_addr mac_addr, zz_mac_addr mac_mask);
 
 /* Check if an exact MAC address exists in the set (no mask matching)
@@ -37,6 +37,9 @@ int zz_members_has(const zz_members *members, zz_mac_addr mac_addr);
  * This applies subnet masks for pattern matching
  * Returns: 1 if matches, 0 if no match */
 int zz_members_match(const zz_members *members, zz_mac_addr mac_addr);
+
+int zz_members_filter_allows(zz_mac_addr mac_addr, int exclude_first,
+                             const zz_members *include, const zz_members *exclude);
 
 /* Get the number of entries in the set
  * Returns: count of MAC address entries */

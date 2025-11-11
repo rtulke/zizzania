@@ -19,4 +19,9 @@
  * is considered invalid and the handshake sequence is restarted. */
 #define ZZ_MAX_HANDSHAKE_TIME 500000
 
+#define ZZ_USEC_PER_SEC 1000000ULL
+
+#define ZZ_KILLER_IDLE_THRESHOLD(max_attempts, interval) \
+    (((max_attempts) > 0 ? ((max_attempts) - 1) : 0) * (interval))
+
 #endif

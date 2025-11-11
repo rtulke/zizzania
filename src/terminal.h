@@ -13,6 +13,8 @@
 
 #include "handler.h"
 
+#define ZZ_MAC_COLUMN_WIDTH ZZ_MAC_ADDR_STRING_SIZE
+
 /* Conditionally apply ANSI color codes to a string.
  * If output is to a TTY, wraps the string with color escape sequences.
  * Otherwise, returns the string as-is for non-TTY output (e.g., pipes, files). */

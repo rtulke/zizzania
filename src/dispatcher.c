@@ -7,7 +7,6 @@
  * to send deauthentication frames.
  */
 
-#include <assert.h>
 #include <errno.h>
 #include <signal.h>
 #include <stddef.h>
@@ -20,9 +19,6 @@
 
 /* Interval between periodic killer invocations (in seconds) */
 #define DISPATCHER_TIMEOUT 1
-
-/* Forward declaration to avoid circular dependency with killer.h */
-int zz_killer_run(zz_handler *zz, zz_killer *killer);
 
 /* Global pcap handle for signal handler (signal handlers can't take parameters) */
 static pcap_t *pcap = NULL;
@@ -69,7 +65,10 @@ static void *dispatcher(void *_zz) {
     memset(&timer, 0, sizeof(struct itimerval));
     timer.it_value.tv_sec = DISPATCHER_TIMEOUT;    /* Initial delay */
     timer.it_interval.tv_sec = DISPATCHER_TIMEOUT; /* Repeat interval */
-    assert(setitimer(ITIMER_REAL, &timer, NULL) == 0);
+    if (setitimer(ITIMER_REAL, &timer, NULL) != 0) {
+        zz_error(zz, "Cannot configure dispatcher timer: %s", strerror(errno));
+        return (void *)0;
+    }
 
     /* Main dispatcher loop - wait for signals */
     error = 0;
@@ -77,7 +76,15 @@ static void *dispatcher(void *_zz) {
         int signal;
 
         /* Block until we receive one of the signals in our set */
-        assert(sigwait(&set, &signal) == 0);
+        {
+            int sigwait_result = sigwait(&set, &signal);
+            if (sigwait_result != 0) {
+                zz_error(zz, "sigwait failed: %s", strerror(sigwait_result));
+                zz->is_done = 1;
+                error = 1;
+                break;
+            }
+        }
 
         switch (signal) {
         case SIGUSR1:
@@ -108,7 +115,10 @@ static void *dispatcher(void *_zz) {
     /* Clean up: disable the periodic alarm */
     if (!zz->setup.is_passive) {
         memset(&timer, 0, sizeof(struct itimerval));
-        assert(setitimer(ITIMER_REAL, &timer, NULL) == 0);
+        if (setitimer(ITIMER_REAL, &timer, NULL) != 0) {
+            zz_error(zz, "Cannot disable dispatcher timer: %s", strerror(errno));
+            error = 1;
+        }
     }
 
     /* Return success/failure status to joining thread */
@@ -130,19 +140,27 @@ static void *dispatcher(void *_zz) {
  *   thread - Output parameter for created thread handle
  *
  * Returns:
- *   Always returns 1 (failures are asserted)
+ *   1 on success, 0 on failure
  */
 int zz_dispatcher_start(zz_handler *zz, pthread_t *thread) {
     struct sigaction sa = {0};
     sigset_t set;
+    sigset_t previous_mask;
+    int pthread_error;
 
     /* Set up global pcap handle for signal handler */
     pcap = zz->pcap;
 
     /* Install signal handler for graceful termination */
     sa.sa_handler = terminate_pcap_loop;
-    assert(sigaction(SIGINT, &sa, NULL) == 0);  /* Ctrl-C */
-    assert(sigaction(SIGTERM, &sa, NULL) == 0); /* kill command */
+    if (sigaction(SIGINT, &sa, NULL) == -1) {  /* Ctrl-C */
+        zz_error(zz, "Cannot install SIGINT handler: %s", strerror(errno));
+        return 0;
+    }
+    if (sigaction(SIGTERM, &sa, NULL) == -1) { /* kill command */
+        zz_error(zz, "Cannot install SIGTERM handler: %s", strerror(errno));
+        return 0;
+    }
 
     /* Mask all signals in the calling thread (main thread) except
      * termination signals, which must be able to break the pcap loop.
@@ -150,11 +168,20 @@ int zz_dispatcher_start(zz_handler *zz, pthread_t *thread) {
     sigfillset(&set);
     sigdelset(&set, SIGINT);   /* Allow SIGINT in main thread */
     sigdelset(&set, SIGTERM);  /* Allow SIGTERM in main thread */
-    assert(pthread_sigmask(SIG_SETMASK, &set, NULL) == 0);
+    pthread_error = pthread_sigmask(SIG_SETMASK, &set, &previous_mask);
+    if (pthread_error != 0) {
+        zz_error(zz, "Cannot apply signal mask: %s", strerror(pthread_error));
+        return 0;
+    }
 
     /* Create the dispatcher thread */
     zz_log("Starting the dispatcher thread");
-    assert(pthread_create(thread, NULL, dispatcher, zz) == 0);
+    pthread_error = pthread_create(thread, NULL, dispatcher, zz);
+    if (pthread_error != 0) {
+        pthread_sigmask(SIG_SETMASK, &previous_mask, NULL);
+        zz_error(zz, "Cannot create dispatcher thread: %s", strerror(pthread_error));
+        return 0;
+    }
 
     return 1;
 }

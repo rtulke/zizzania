@@ -20,6 +20,7 @@
 
 /* Size of a MAC address string in format "XX:XX:XX:XX:XX:XX\0" */
 #define ZZ_MAC_ADDR_STRING_SIZE 18
+#define ZZ_QOS_CONTROL_SIZE 2
 
 /* Special MAC address values */
 #define ZZ_MAC_ADDR_BCAST      0xffffffffffffULL  /* Broadcast: ff:ff:ff:ff:ff:ff */

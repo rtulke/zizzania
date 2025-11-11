@@ -15,11 +15,13 @@
 
 #include "ieee802.h"
 
+struct zz_handler;
+
 /*
  * Basic Service Set (access point) structure
  * Tracks information about a single wireless network/AP.
  */
-typedef struct {
+typedef struct zz_bss {
     zz_mac_addr bssid;          /* AP's MAC address (BSSID) - hash table key */
     unsigned is_allowed:1;      /* AP passed include/exclude filters */
     unsigned has_beacon:1;      /* We've seen a beacon frame (have SSID) */
@@ -28,10 +30,18 @@ typedef struct {
     long n_handshakes;          /* Count of completed handshakes for this AP */
     long n_data_packets;        /* Count of data packets seen for this AP */
     UT_hash_handle hh;          /* uthash handle for hash table management */
+    struct zz_bss *next_free;   /* Memory pool linkage */
 } zz_bss;
 
 /* BSSs collection is a pointer to hash table head */
 typedef zz_bss *zz_bsss;
+
+typedef struct zz_bss_pool_chunk zz_bss_pool_chunk;
+
+typedef struct {
+    zz_bss *free_list;
+    zz_bss_pool_chunk *chunks;
+} zz_bss_pool;
 
 /*
  * Initialize a new empty BSSs hash table.
@@ -46,14 +56,17 @@ void zz_bsss_new(zz_bsss *bsss);
  * If the BSS doesn't exist, a new entry is created and initialized.
  *
  * Parameters:
+ *   zz - Handler used for error reporting
  *   bsss - BSSs hash table
  *   bssid - Access point BSSID to look up
  *   bss - Output pointer to the found/created BSS structure
  *
  * Returns:
- *   1 if BSS was newly created, 0 if it already existed
+ *   1 if BSS was newly created, 0 if it already existed,
+ *   -1 on allocation failure (error stored via zz_error)
  */
-int zz_bsss_lookup(zz_bsss *bsss, zz_mac_addr bssid, zz_bss **bss);
+int zz_bsss_lookup(struct zz_handler *zz, zz_bsss *bsss,
+                   zz_mac_addr bssid, zz_bss **bss);
 
 /*
  * Free all BSSs and the hash table.
@@ -61,6 +74,7 @@ int zz_bsss_lookup(zz_bsss *bsss, zz_mac_addr bssid, zz_bss **bss);
  * Parameters:
  *   bsss - BSSs hash table to free
  */
-void zz_bsss_free(zz_bsss *bsss);
+void zz_bsss_free(struct zz_handler *zz, zz_bsss *bsss);
+void zz_bsss_pool_destroy(struct zz_handler *zz);
 
 #endif

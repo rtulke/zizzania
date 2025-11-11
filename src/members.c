@@ -6,7 +6,6 @@
  * BSSIDs (access points) and station addresses.
  */
 
-#include <assert.h>
 #include <stdlib.h>
 
 #include <uthash.h>
@@ -74,7 +73,9 @@ int zz_members_put_mask(zz_members *members, zz_mac_addr mac_addr, zz_mac_addr m
 
     /* Create new device entry and add to hash table */
     device = malloc(sizeof(struct zz_device));
-    assert(device != NULL);
+    if (device == NULL) {
+        return -1;
+    }
     device->addr = mac_addr;
     device->mask = mac_mask;
     HASH_ADD(hh, *members, addr, sizeof(zz_mac_addr), device);
@@ -124,6 +125,31 @@ int zz_members_match(const zz_members *members, zz_mac_addr mac_addr) {
     }
 
     return 0;  /* No match */
+}
+
+int zz_members_filter_allows(zz_mac_addr mac_addr, int exclude_first,
+                             const zz_members *include, const zz_members *exclude) {
+    const int include_empty = zz_members_is_empty(include);
+    const int exclude_empty = zz_members_is_empty(exclude);
+
+    if (!include_empty && !exclude_empty) {
+        if (exclude_first) {
+            return zz_members_match(include, mac_addr) ||
+                   !zz_members_match(exclude, mac_addr);
+        }
+        return zz_members_match(include, mac_addr) &&
+               !zz_members_match(exclude, mac_addr);
+    }
+
+    if (!include_empty) {
+        return zz_members_match(include, mac_addr);
+    }
+
+    if (!exclude_empty) {
+        return !zz_members_match(exclude, mac_addr);
+    }
+
+    return 1;
 }
 
 /*

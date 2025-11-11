@@ -6,7 +6,6 @@
  * loop. This is the orchestration layer that ties together all subsystems.
  */
 
-#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
 #include <signal.h>
@@ -286,11 +285,6 @@ int zz_initialize(zz_handler *zz) {
     zz_bsss_new(&zz->bsss);
     zz_clients_new(&zz->clients);
 
-    /* Initialize killer subsystem (unless passive mode) */
-    if (!zz->setup.is_passive) {
-        zz_killer_new(&zz->killer);
-    }
-
     /* Detect TTY for ANSI color output */
     zz->setup.is_tty_output = isatty(2); /* stderr */
 
@@ -307,6 +301,26 @@ int zz_initialize(zz_handler *zz) {
     zz->setup.killer_interval = 5;       /* 5 seconds between attempts */
 
     return 1;
+}
+
+static void reset_tracking_state(zz_handler *zz) {
+    zz_members_free(&zz->setup.included_bssids);
+    zz_members_new(&zz->setup.included_bssids);
+
+    zz_members_free(&zz->setup.excluded_bssids);
+    zz_members_new(&zz->setup.excluded_bssids);
+
+    zz_members_free(&zz->setup.included_stations);
+    zz_members_new(&zz->setup.included_stations);
+
+    zz_members_free(&zz->setup.excluded_stations);
+    zz_members_new(&zz->setup.excluded_stations);
+
+    zz_bsss_free(zz, &zz->bsss);
+    zz_bsss_new(&zz->bsss);
+
+    zz_clients_free(zz, &zz->clients);
+    zz_clients_new(&zz->clients);
 }
 
 /*
@@ -328,12 +342,59 @@ int zz_initialize(zz_handler *zz) {
  *   1 on success, 0 on any failure
  */
 int zz_start(zz_handler *zz) {
-    return create_pcap(zz) &&
-           zz_drop_root(zz) &&
-           check_monitor(zz) &&
-           set_bpf(zz) &&
-           open_dumper(zz) &&
-           packet_loop(zz);
+    int killer_started = 0;
+
+    if (!create_pcap(zz)) {
+        goto fail;
+    }
+
+    if (!zz_drop_root(zz)) {
+        goto fail;
+    }
+
+    if (!check_monitor(zz)) {
+        goto fail;
+    }
+
+    if (!set_bpf(zz)) {
+        goto fail;
+    }
+
+    if (!open_dumper(zz)) {
+        goto fail;
+    }
+
+    if (zz->setup.is_live && !zz->setup.is_passive && !zz->killer_initialized) {
+        if (!zz_killer_new(zz, &zz->killer)) {
+            goto fail;
+        }
+        zz->killer_initialized = 1;
+        killer_started = 1;
+    }
+
+    if (!packet_loop(zz)) {
+        goto fail;
+    }
+
+    return 1;
+
+fail:
+    if (zz->dumper) {
+        pcap_dump_close(zz->dumper);
+        zz->dumper = NULL;
+    }
+    if (killer_started) {
+        zz_killer_free(zz, &zz->killer);
+        zz->killer_initialized = 0;
+    }
+    if (zz->pcap) {
+        pcap_close(zz->pcap);
+        zz->pcap = NULL;
+    }
+
+    reset_tracking_state(zz);
+
+    return 0;
 }
 
 /*
@@ -351,25 +412,42 @@ int zz_finalize(zz_handler *zz) {
     if (zz->dumper) {
         zz_log("Closing packet dump '%s'", zz->setup.output);
         pcap_dump_close(zz->dumper);
+        zz->dumper = NULL;
     }
 
     /* Free all filter sets */
     zz_members_free(&zz->setup.included_bssids);
+    zz_members_new(&zz->setup.included_bssids);
+
     zz_members_free(&zz->setup.excluded_bssids);
+    zz_members_new(&zz->setup.excluded_bssids);
+
     zz_members_free(&zz->setup.included_stations);
+    zz_members_new(&zz->setup.included_stations);
+
     zz_members_free(&zz->setup.excluded_stations);
+    zz_members_new(&zz->setup.excluded_stations);
 
     /* Free tracking structures */
-    zz_bsss_free(&zz->bsss);
-    zz_clients_free(&zz->clients);
+    zz_bsss_free(zz, &zz->bsss);
+    zz_bsss_new(&zz->bsss);
+    zz_bsss_pool_destroy(zz);
+
+    zz_clients_free(zz, &zz->clients);
+    zz_clients_new(&zz->clients);
+    zz_clients_pool_destroy(zz);
 
     /* Free killer subsystem if it was initialized */
-    if (!zz->setup.is_passive) {
-        zz_killer_free(&zz->killer);
+    if (zz->killer_initialized) {
+        zz_killer_free(zz, &zz->killer);
+        zz->killer_initialized = 0;
     }
 
     /* Close pcap handle */
-    pcap_close(zz->pcap);
+    if (zz->pcap) {
+        pcap_close(zz->pcap);
+        zz->pcap = NULL;
+    }
 
     return 1;
 }

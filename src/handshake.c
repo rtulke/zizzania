@@ -22,6 +22,50 @@
 #define is_done(handshake, max) \
     ((((handshake) & ((1 << (max)) - 1)) == ((1 << (max)) - 1)))
 
+static int identify_handshake_message(const struct ieee8021x_authentication_header *auth,
+                                      unsigned *handshake_id, uint64_t *replay_counter_1) {
+    const uint16_t flags = be16toh(auth->flags);
+
+    if ((flags & ZZ_EAPOL_MASK_1) == ZZ_EAPOL_FLAGS_1) {
+        *handshake_id = 0;
+        *replay_counter_1 = be64toh(auth->replay_counter);
+        return 1;
+    }
+    if ((flags & ZZ_EAPOL_MASK_2) == ZZ_EAPOL_FLAGS_2) {
+        *handshake_id = 1;
+        *replay_counter_1 = be64toh(auth->replay_counter);
+        return 1;
+    }
+    if ((flags & ZZ_EAPOL_MASK_3) == ZZ_EAPOL_FLAGS_3) {
+        *handshake_id = 2;
+        *replay_counter_1 = be64toh(auth->replay_counter) - 1;
+        return 1;
+    }
+    if ((flags & ZZ_EAPOL_MASK_4) == ZZ_EAPOL_FLAGS_4) {
+        *handshake_id = 3;
+        *replay_counter_1 = be64toh(auth->replay_counter) - 1;
+        return 1;
+    }
+
+    return 0;
+}
+
+static int validate_replay_counter(const zz_client *client, unsigned handshake_id,
+                                   const struct ieee8021x_authentication_header *auth) {
+    const uint64_t counter = be64toh(auth->replay_counter);
+
+    switch (handshake_id) {
+    case 0:
+    case 1:
+        return counter == client->replay_counter;
+    case 2:
+    case 3:
+        return counter == client->replay_counter + 1;
+    default:
+        return 1;
+    }
+}
+
 /*
  * Process a packet through the WPA handshake state machine.
  * This is the heart of zizzania's handshake tracking logic. It maintains
@@ -64,10 +108,17 @@ zz_packet_outcome zz_process_packet(zz_handler *zz,
     zz_client *client;
     time_t last_data_ts;
     zz_packet_outcome outcome = {0};
+    int lookup_status;
 
     /* Lookup or create client descriptor.
      * The lookup function returns 1 if this is a newly created client. */
-    if (zz_clients_lookup(&zz->clients, station, bssid, &client)) {
+    lookup_status = zz_clients_lookup(zz, &zz->clients, station, bssid, &client);
+    if (lookup_status == -1) {
+        zz->is_done = 1;
+        pcap_breakloop(zz->pcap);
+        return outcome;
+    }
+    if (lookup_status == 1) {
         /* New client discovered - initiate tracking */
         outcome.new_client = 1;
     }
@@ -85,32 +136,10 @@ zz_packet_outcome zz_process_packet(zz_handler *zz,
         int initialize = 0;
 
         /* Convert timestamp to microseconds for precise timeout calculations */
-        ts = (packet_header->ts.tv_sec * 1000000 +
-              packet_header->ts.tv_usec % 1000000);
+        ts = ((uint64_t)packet_header->ts.tv_sec * ZZ_USEC_PER_SEC +
+              (packet_header->ts.tv_usec % ZZ_USEC_PER_SEC));
 
-        /* Identify which handshake message (1-4) based on EAPOL key information flags.
-         * Each message has a unique combination of flags (see ieee802.h):
-         *   Message #1: from AP, pairwise key, ACK flag set
-         *   Message #2: from STA, pairwise key, MIC flag set
-         *   Message #3: from AP, pairwise key, ACK+MIC+Install flags set
-         *   Message #4: from STA, pairwise key, MIC flag set
-         *
-         * For messages #3 and #4, we compute replay_counter_1 by subtracting 1
-         * because the AP increments the counter for messages #3/#4. */
-        if ((be16toh(auth->flags) & ZZ_EAPOL_MASK_1) == ZZ_EAPOL_FLAGS_1) {
-            handshake_id = 0;  /* Message #1 */
-            replay_counter_1 = be64toh(auth->replay_counter);
-        } else if ((be16toh(auth->flags) & ZZ_EAPOL_MASK_2) == ZZ_EAPOL_FLAGS_2) {
-            handshake_id = 1;  /* Message #2 */
-            replay_counter_1 = be64toh(auth->replay_counter);
-        } else if ((be16toh(auth->flags) & ZZ_EAPOL_MASK_3) == ZZ_EAPOL_FLAGS_3) {
-            handshake_id = 2;  /* Message #3 */
-            replay_counter_1 = be64toh(auth->replay_counter) - 1;
-        } else if ((be16toh(auth->flags) & ZZ_EAPOL_MASK_4) == ZZ_EAPOL_FLAGS_4) {
-            handshake_id = 3;  /* Message #4 */
-            replay_counter_1 = be64toh(auth->replay_counter) - 1;
-        } else {
-            /* Unrecognized flag combination - invalid EAPOL frame */
+        if (!identify_handshake_message(auth, &handshake_id, &replay_counter_1)) {
             #ifdef DEBUG
             zz_log("Unrecognizable EAPOL flags 0x%04hx", be16toh(auth->flags));
             #endif
@@ -159,35 +188,16 @@ zz_packet_outcome zz_process_packet(zz_handler *zz,
         }
         /* Normal case: First time receiving this message in current handshake */
         else {
-            int ok;
-
-            /* Validate replay counter sequence.
-             * Messages #1 and #2 should have the same counter as message #1.
-             * Messages #3 and #4 should have counter = (message #1 counter) + 1. */
-            switch (handshake_id) {
-            case 0: case 1:
-                ok = (be64toh(auth->replay_counter) == client->replay_counter);
-                break;
-            case 2: case 3:
-                ok = (be64toh(auth->replay_counter) == client->replay_counter + 1);
-                break;
-            }
-
-            /* Reject if replay counter doesn't match expected sequence */
-            if (!ok) {
+            if (!validate_replay_counter(client, handshake_id, auth)) {
                 outcome.ignore = 1;
                 outcome.ignore_reason = ZZ_IGNORE_REASON_INVALID_COUNTER;
                 return outcome;
             }
 
-            /* Valid new message - store it in the handshake bitmask and save header */
             client->handshake |= 1 << handshake_id;
             memcpy(&client->headers[handshake_id], auth,
                    sizeof(struct ieee8021x_authentication_header));
 
-            /* Check if we've captured all required messages.
-             * For full handshake: need messages #1, #2, #3, #4 (max=4)
-             * For partial:        need messages #1, #2 only (max=2, -2 option) */
             if (handshake_id < zz->setup.max_handshake &&
                 is_done(client->handshake, zz->setup.max_handshake)) {
                 outcome.got_handshake = 1;
@@ -223,7 +233,8 @@ zz_packet_outcome zz_process_packet(zz_handler *zz,
         if (last_data_ts &&
             !is_done(client->handshake, zz->setup.max_handshake) &&
             (packet_header->ts.tv_sec - last_data_ts >
-             (zz->setup.killer_max_attempts - 1) * zz->setup.killer_interval)) {
+             ZZ_KILLER_IDLE_THRESHOLD(zz->setup.killer_max_attempts,
+                                      zz->setup.killer_interval))) {
             outcome.track_client = 1;
             outcome.track_reason = ZZ_TRACK_REASON_ALIVE;
         }

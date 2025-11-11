@@ -6,7 +6,6 @@
  * Performs extensive validation to catch incompatible option combinations.
  */
 
-#include <assert.h>
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h>
@@ -45,6 +44,46 @@ static int parse_natural(const char *string, int *value) {
     }
 }
 
+static int parse_mac_filter_option(zz_handler *zz, int option, const char *argument) {
+    const char *mask_ptr;
+    zz_mac_addr mac_addr;
+    zz_mac_addr mac_mask;
+    zz_members *members;
+
+    if (!zz_mac_addr_sscan(&mac_addr, argument, "/")) {
+        zz_error(zz, "Invalid MAC address '%s'", argument);
+        return 0;
+    }
+
+    mask_ptr = strchr(argument, '/');
+    if (mask_ptr) {
+        if (!zz_mac_addr_sscan(&mac_mask, mask_ptr + 1, "")) {
+            zz_error(zz, "Invalid MAC address mask '%s'", mask_ptr + 1);
+            return 0;
+        }
+    } else {
+        mac_mask = -1;
+    }
+
+    switch (option) {
+    case 'b': members = &zz->setup.included_bssids; break;
+    case 'B': members = &zz->setup.excluded_bssids; break;
+    case 's': members = &zz->setup.included_stations; break;
+    case 'S': members = &zz->setup.excluded_stations; break;
+    default:
+        zz_error(zz, "Unknown MAC filter option -%c", option);
+        return 0;
+    }
+
+    if (zz_members_put_mask(members, mac_addr, mac_mask) == -1) {
+        zz_error(zz, "Cannot store MAC filter '%s': %s",
+                 argument, strerror(errno));
+        return 0;
+    }
+
+    return 1;
+}
+
 /*
  * Parse command-line arguments and configure the handler.
  * Uses getopt to process options, validates all combinations, and sets up
@@ -76,10 +115,6 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
     int n_deauths = 0;         /* Flag for -d option */
     int killer_max_attempts = 0;  /* Flag for -a option */
     int killer_interval = 0;   /* Flag for -t option */
-    zz_mac_addr mac_addr;
-    zz_mac_addr mac_mask;
-    char *mask_ptr;
-    zz_members *members;
 
     /* Disable getopt's built-in error messages - we handle them ourselves */
     opterr = 0;
@@ -138,33 +173,9 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
         case 'B':  /* Exclude BSSID (blacklist) */
         case 's':  /* Include station (whitelist) */
         case 'S':  /* Exclude station (blacklist) */
-            /* Parse MAC address (required) */
-            if (!zz_mac_addr_sscan(&mac_addr, optarg, "/")) {
-                zz_error(zz, "Invalid MAC address '%s'", optarg);
+            if (!parse_mac_filter_option(zz, opt, optarg)) {
                 return 0;
             }
-
-            /* Parse optional subnet mask after '/' */
-            if (mask_ptr = strchr(optarg, '/'), mask_ptr) {
-                if (!zz_mac_addr_sscan(&mac_mask, mask_ptr + 1, "")) {
-                    zz_error(zz, "Invalid MAC address mask '%s'", mask_ptr + 1);
-                    return 0;
-                }
-            } else {
-                mac_mask = -1;  /* No mask = exact match (all bits set) */
-            }
-
-            /* Select the appropriate members set based on option */
-            switch (opt) {
-            case 'b': members = &zz->setup.included_bssids; break;
-            case 'B': members = &zz->setup.excluded_bssids; break;
-            case 's': members = &zz->setup.included_stations; break;
-            case 'S': members = &zz->setup.excluded_stations; break;
-            default: __builtin_unreachable();
-            }
-
-            /* Add the MAC address (with mask) to the appropriate set */
-            zz_members_put_mask(members, mac_addr, mac_mask);
             break;
 
         case 'x':  /* Filter application order */

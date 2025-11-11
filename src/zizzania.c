@@ -35,12 +35,14 @@ int main(int argc, char *argv[]) {
     if (!zz_parse_options(&zz, argc, argv)) {
         zz_print_usage();
         zz_print_error(&zz);
+        zz_finalize(&zz);
         return EXIT_FAILURE;
     }
 
     /* Start packet capture and processing (blocks until complete) */
     if (!zz_start(&zz)) {
         zz_print_error(&zz);
+        zz_finalize(&zz);
         return EXIT_FAILURE;
     }
 

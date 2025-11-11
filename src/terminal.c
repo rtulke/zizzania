@@ -93,6 +93,9 @@ void zz_print_stats(zz_handler *zz) {
         zz_out("Packet statistics");
         zz_out("  - Received ....... %u", stats.ps_recv);
         zz_out("  - Dropped ........ %u", stats.ps_drop + stats.ps_ifdrop);
+        if (zz->killer_pipe_drops > 0) {
+            zz_out("  - Killer drops ... %lu", zz->killer_pipe_drops);
+        }
     }
 
     /* Iterate through all discovered BSSs and print statistics for allowed ones */
@@ -111,7 +114,7 @@ void zz_print_stats(zz_handler *zz) {
 
         /* Print BSS statistics */
         zz_out("");
-        zz_out("SSID $'%s' (%s)", bss->ssid, bssid_str);
+        zz_out("SSID $'%s' (%-*s)", bss->ssid, ZZ_MAC_COLUMN_WIDTH, bssid_str);
         zz_out("  - Handshakes ..... %ld", bss->n_handshakes);
         zz_out("  - Stations ....... %u", zz_members_count(&bss->stations));
         zz_out("  - Data packets ... %ld", bss->n_data_packets);
