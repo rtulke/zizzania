@@ -9,3 +9,8 @@ compile_commands.json
 *.d
 CLAUDE.md
 TODO.md
+tests
+tests/
+AGENTS.md
+.github/
+config.Makefile

@@ -8,6 +8,7 @@
 
 #include <stdlib.h>
 
+#include "uthash_config.h"
 #include <uthash.h>
 
 #include "members.h"

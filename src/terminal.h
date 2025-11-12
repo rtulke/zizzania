@@ -49,7 +49,7 @@
 #define zz_log(format, ...) zz_print(LOG, zz->setup.is_verbose, format, ##__VA_ARGS__)
 
 /* Print command-line usage information */
-void zz_print_usage();
+void zz_print_usage(void);
 
 /* Print the error message stored in zz->error_buffer */
 void zz_print_error(const zz_handler *zz);

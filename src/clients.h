@@ -11,6 +11,7 @@
 
 #include <time.h>
 
+#include "uthash_config.h"
 #include <uthash.h>
 
 #include "ieee802.h"

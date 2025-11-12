@@ -15,6 +15,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "uthash_config.h"
 #include <uthash.h>
 
 #include "handler.h"

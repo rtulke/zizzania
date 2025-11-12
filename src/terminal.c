@@ -19,7 +19,7 @@
  * Shows the program version, copyright, all available options with
  * descriptions, and an example command line.
  */
-void zz_print_usage() {
+void zz_print_usage(void) {
     #define LN(x) x "\n"
     fprintf(stderr,
             LN("zizzania v" ZZ_VERSION " - " ZZ_DESCRIPTION)

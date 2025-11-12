@@ -14,7 +14,7 @@
  * Print command-line usage information to stderr.
  * Shows all available options with descriptions and examples.
  */
-void zz_print_usage();
+void zz_print_usage(void);
 
 /*
  * Parse command-line arguments and configure the handler.

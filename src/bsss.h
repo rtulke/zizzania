@@ -9,6 +9,7 @@
 #ifndef ZZ_BSSS_H
 #define ZZ_BSSS_H
 
+#include "uthash_config.h"
 #include <uthash.h>
 
 #include "members.h"
