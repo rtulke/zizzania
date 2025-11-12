@@ -258,32 +258,32 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
     if (!zz->setup.is_live &&
         (zz->setup.no_rfmon || zz->setup.channel > 0 || zz->setup.is_passive ||
          n_deauths || killer_max_attempts || killer_interval)) {
-        zz_error(zz, "Incompatible options -M, -c, -n, -d, -a, -t with offline mode");
+        zz_error(zz, "Options -M, -c, -n, -d, -a, -t require live capture (-i); cannot use with -r");
         return 0;
     }
 
     /* Attack-related options conflict with passive mode */
     if (zz->setup.is_passive &&
         (n_deauths || killer_max_attempts || killer_interval)) {
-        zz_error(zz, "Incompatible options -d, -a, -t with passive mode");
+        zz_error(zz, "Options -d, -a, -t (deauth attacks) conflict with -n (passive mode)");
         return 0;
     }
 
     /* Early quit only makes sense for live capture */
     if (!zz->setup.is_live && zz->setup.early_quit) {
-        zz_error(zz, "Incompatible option -q with live mode");
+        zz_error(zz, "Option -q (early quit) requires live capture; use -i instead of -r");
         return 0;
     }
 
     /* Group traffic dump option requires output file */
     if (zz->setup.dump_group_traffic && n_outputs == 0) {
-        zz_error(zz, "Useless option -g without an output file");
+        zz_error(zz, "Option -g (dump group traffic) requires output file; add -w <file>");
         return 0;
     }
 
     /* Can't specify both -2 and -3 */
     if (max_handshake_2 && max_handshake_3) {
-        zz_error(zz, "Incompatible options -2 and -3");
+        zz_error(zz, "Cannot use both -2 and -3; choose one handshake capture mode");
         return 0;
     }
 

@@ -134,8 +134,8 @@ static int check_monitor(zz_handler *zz) {
         const char *expected_dlt;
 
         expected_dlt = pcap_datalink_val_to_name(DLT_IEEE802_11_RADIO);
-        zz_error(zz, "Wrong device type/mode '%s'; '%s' expected",
-                 pcap_datalink_val_to_name(dlt), expected_dlt);
+        zz_error(zz, "Interface '%s' has wrong datalink type '%s'; expected '%s' (monitor mode)",
+                 zz->setup.input, pcap_datalink_val_to_name(dlt), expected_dlt);
         return 0;
     }
 
