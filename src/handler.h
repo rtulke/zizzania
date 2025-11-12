@@ -36,7 +36,7 @@ typedef struct zz_handler {
         char *output;                     /* Output pcap file path */
         unsigned is_live:1;               /* Capturing from live interface vs file */
         unsigned is_passive:1;            /* Passive mode: no deauth attacks */
-        unsigned is_verbose:1;            /* Enable verbose logging */
+        unsigned log_level:3;             /* Logging verbosity level (0=ERROR, 1=INFO, 2=WARN, 3=DEBUG, 4=TRACE) */
         unsigned is_tty_output:1;         /* Output is to a TTY (enables colors) */
         unsigned no_rfmon:1;              /* Don't set monitor mode (already set) */
         unsigned dump_group_traffic:1;    /* Include broadcast/multicast traffic in output */

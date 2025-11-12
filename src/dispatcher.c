@@ -15,6 +15,7 @@
 #include "dispatcher.h"
 #include "handler.h"
 #include "killer.h"
+#include "log.h"
 #include "terminal.h"
 
 /* Interval between periodic killer invocations (in seconds) */
@@ -88,14 +89,9 @@ static void *dispatcher(void *_zz) {
 
         switch (signal) {
         case SIGUSR1:
-            /* Toggle verbose logging (useful for debugging live captures) */
-            if (zz->setup.is_verbose) {
-                zz_log("Verbose logging disabled");
-                zz->setup.is_verbose = 0;
-            } else {
-                zz->setup.is_verbose = 1;
-                zz_log("Verbose logging enabled");
-            }
+            /* Cycle through log levels: ERROR → INFO → WARN → DEBUG → TRACE → ERROR */
+            zz->setup.log_level = (zz->setup.log_level + 1) % (ZZ_LOG_TRACE + 1);
+            zz_info("Log level changed to: %s", ZZ_LOG_LEVEL_NAMES[zz->setup.log_level]);
             break;
 
         case SIGALRM:

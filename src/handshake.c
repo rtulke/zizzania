@@ -140,9 +140,7 @@ zz_packet_outcome zz_process_packet(zz_handler *zz,
               (packet_header->ts.tv_usec % ZZ_USEC_PER_SEC));
 
         if (!identify_handshake_message(auth, &handshake_id, &replay_counter_1)) {
-            #ifdef DEBUG
-            zz_log("Unrecognizable EAPOL flags 0x%04hx", be16toh(auth->flags));
-            #endif
+            zz_trace("Unrecognizable EAPOL flags 0x%04hx", be16toh(auth->flags));
             outcome.ignore = 1;
             outcome.ignore_reason = ZZ_IGNORE_REASON_INVALID_EAPOL;
             return outcome;

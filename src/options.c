@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "handler.h"
+#include "log.h"
 
 /*
  * Parse a string as a natural number (positive integer).
@@ -212,8 +213,11 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
             zz->setup.early_quit = 1;
             break;
 
-        case 'v':  /* Enable verbose logging */
-            zz->setup.is_verbose = 1;
+        case 'v':  /* Increase verbosity level */
+            /* Each -v increases log level: -v → INFO, -vv → WARN, -vvv → DEBUG, -vvvv → TRACE */
+            if (zz->setup.log_level < ZZ_LOG_TRACE) {
+                zz->setup.log_level++;
+            }
             break;
 
         case '?':  /* Unknown option */

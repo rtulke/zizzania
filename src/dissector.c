@@ -19,10 +19,11 @@
 /* Convert struct timeval to floating-point seconds */
 #define TV_TO_SEC(tv) ((tv).tv_sec + (tv).tv_usec / 1000000.)
 
-/* Logging macro that includes relative timestamp (seconds since first packet) */
-#define log_ts(zz, packet_header, format, ...) \
-    zz_log("%.3f - " format, \
-           TV_TO_SEC((packet_header)->ts) - (zz)->epoch, ##__VA_ARGS__)
+/* Trace logging macro that includes relative timestamp (seconds since first packet).
+ * Used for very detailed packet-level tracing (TRACE level). */
+#define trace_ts(zz, packet_header, format, ...) \
+    zz_trace("%.3f - " format, \
+             TV_TO_SEC((packet_header)->ts) - (zz)->epoch, ##__VA_ARGS__)
 
 struct zz_frame_addresses {
     zz_mac_addr bssid;
@@ -121,7 +122,7 @@ static int parse_frame_addresses(zz_handler *zz, const struct pcap_pkthdr *packe
         return 1;
     }
 
-    log_ts(zz, packet_header, "Skipping packet due to frame direction");
+    trace_ts(zz, packet_header, "Skipping packet due to frame direction");
     return 0;
 }
 
@@ -163,15 +164,15 @@ static int process_packet_outcome(zz_handler *zz, const struct pcap_pkthdr *pack
     if (outcome.ignore) {
         switch (outcome.ignore_reason) {
         case ZZ_IGNORE_REASON_RETRANSMISSION:
-            log_ts(zz, packet_header, "%s @ %s $'%s' - Handshake message #%d (retransmission)",
+            trace_ts(zz, packet_header, "%s @ %s $'%s' - Handshake message #%d (retransmission)",
                    station_str, bssid_str, bss->ssid, outcome.handshake_info);
             break;
         case ZZ_IGNORE_REASON_INVALID_EAPOL:
-            log_ts(zz, packet_header, "%s @ %s $'%s' - Ignoring invalid key flags",
+            trace_ts(zz, packet_header, "%s @ %s $'%s' - Ignoring invalid key flags",
                    station_str, bssid_str, bss->ssid);
             break;
         case ZZ_IGNORE_REASON_INVALID_COUNTER:
-            log_ts(zz, packet_header, "%s @ %s $'%s' - Ignoring invalid replay counter",
+            trace_ts(zz, packet_header, "%s @ %s $'%s' - Ignoring invalid replay counter",
                    station_str, bssid_str, bss->ssid);
             break;
         }
@@ -202,7 +203,7 @@ static int process_packet_outcome(zz_handler *zz, const struct pcap_pkthdr *pack
     if (outcome.track_client) {
         switch (outcome.track_reason) {
         case ZZ_TRACK_REASON_ALIVE:
-            log_ts(zz, packet_header, "%s @ %s $'%s' - Activity detected again",
+            trace_ts(zz, packet_header, "%s @ %s $'%s' - Activity detected again",
                    station_str, bssid_str, bss->ssid);
             break;
         case ZZ_TRACK_REASON_FIRST_HANDSHAKE:
@@ -218,7 +219,7 @@ static int process_packet_outcome(zz_handler *zz, const struct pcap_pkthdr *pack
     }
 
     if (outcome.handshake_info) {
-        log_ts(zz, packet_header, "%s @ %s $'%s' - Handshake message #%d%s",
+        trace_ts(zz, packet_header, "%s @ %s $'%s' - Handshake message #%d%s",
                station_str, bssid_str, bss->ssid, outcome.handshake_info, extra_info);
     }
 
@@ -332,7 +333,7 @@ void zz_dissect_packet(u_char *_zz, const struct pcap_pkthdr *packet_header,
     /* Verify minimum packet size for radiotap header */
     safe_size = sizeof(struct ieee80211_radiotap_header);
     if (packet_header->caplen < safe_size) {
-        log_ts(zz, packet_header, "Skipping too short packet %u bytes", packet_header->caplen);
+        trace_ts(zz, packet_header, "Skipping too short packet %u bytes", packet_header->caplen);
         return;
     }
 
@@ -348,7 +349,7 @@ void zz_dissect_packet(u_char *_zz, const struct pcap_pkthdr *packet_header,
     /* Verify packet has enough space for MAC header */
     safe_size = (cursor - packet) + sizeof(struct ieee80211_mac_header);
     if (packet_header->caplen < safe_size) {
-        log_ts(zz, packet_header, "Skipping too short packet %u bytes", packet_header->caplen);
+        trace_ts(zz, packet_header, "Skipping too short packet %u bytes", packet_header->caplen);
         return;
     }
 
@@ -386,11 +387,9 @@ void zz_dissect_packet(u_char *_zz, const struct pcap_pkthdr *packet_header,
 
     /* Skip all traffic from filtered-out access points */
     if (!bss->is_allowed) {
-        #ifdef DEBUG
         if (!frame.is_beacon) {
-            log_ts(zz, packet_header, "%s @ %s $'%s' - Skipping excluded BSS traffic", station_str, bssid_str, bss->ssid);
+            trace_ts(zz, packet_header, "%s @ %s $'%s' - Skipping excluded BSS traffic", station_str, bssid_str, bss->ssid);
         }
-        #endif
         return;
     }
 
@@ -407,7 +406,7 @@ void zz_dissect_packet(u_char *_zz, const struct pcap_pkthdr *packet_header,
             zz->setup.stations_exclude_first,
             &zz->setup.included_stations,
             &zz->setup.excluded_stations)) {
-        log_ts(zz, packet_header, "%s @ %s $'%s' - Skipping excluded station", station_str, bssid_str, bss->ssid);
+        trace_ts(zz, packet_header, "%s @ %s $'%s' - Skipping excluded station", station_str, bssid_str, bss->ssid);
         return;
     }
 

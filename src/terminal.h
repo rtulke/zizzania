@@ -2,8 +2,8 @@
  * terminal.h - Terminal output and formatting
  *
  * Provides functions and macros for formatted console output with support
- * for ANSI color codes (when connected to a TTY) and different message types
- * (normal output, errors, verbose logging).
+ * for ANSI color codes (when connected to a TTY) and hierarchical log levels
+ * (ERROR, INFO, WARN, DEBUG, TRACE).
  */
 
 #ifndef ZZ_TERMINAL_H
@@ -12,6 +12,7 @@
 #include <stdio.h>
 
 #include "handler.h"
+#include "log.h"
 
 #define ZZ_MAC_COLUMN_WIDTH ZZ_MAC_ADDR_STRING_SIZE
 
@@ -21,13 +22,17 @@
 #define ZZ_ANSI(codes, str) \
     (zz->setup.is_tty_output ? "\x1b[" codes "m" str "\x1b[0m" : str)
 
-/* Message prefixes with color coding:
- * OUT - Green [+] for normal output/success messages
- * ERR - Red [!] for error messages
- * LOG - Blue [*] for verbose logging/debug messages */
-#define ZZ_OUT_PREFIX ZZ_ANSI("32", "[+]")
-#define ZZ_ERR_PREFIX ZZ_ANSI("31", "[!]")
-#define ZZ_LOG_PREFIX ZZ_ANSI("34", "[*]")
+/* Message prefixes with color coding for different log levels:
+ * ERR   - Red [!] for errors (always shown)
+ * INFO  - Green [+] for informational messages
+ * WARN  - Yellow [!] for warnings
+ * DEBUG - Blue [*] for debug messages
+ * TRACE - Cyan [.] for trace/detailed messages */
+#define ZZ_ERR_PREFIX   ZZ_ANSI("31", "[!]")
+#define ZZ_INFO_PREFIX  ZZ_ANSI("32", "[+]")
+#define ZZ_WARN_PREFIX  ZZ_ANSI("33", "[!]")
+#define ZZ_DEBUG_PREFIX ZZ_ANSI("34", "[*]")
+#define ZZ_TRACE_PREFIX ZZ_ANSI("36", "[.]")
 
 /* Generic print macro that conditionally outputs formatted messages.
  * Uses do-while(0) idiom to create a safe statement block. */
@@ -40,13 +45,28 @@
         } \
     } while (0)
 
-/* Convenience macros for different message types:
- * zz_out - Always prints (success/info messages)
- * zz_err - Always prints (error messages)
- * zz_log - Only prints when verbose mode is enabled */
-#define zz_out(format, ...) zz_print(OUT, 1, format, ##__VA_ARGS__)
-#define zz_err(format, ...) zz_print(ERR, 1, format, ##__VA_ARGS__)
-#define zz_log(format, ...) zz_print(LOG, zz->setup.is_verbose, format, ##__VA_ARGS__)
+/* Logging macros for different verbosity levels.
+ * Each macro checks if the current log level is high enough to display the message.
+ * Higher levels include all lower levels (e.g., DEBUG includes ERROR+INFO+WARN+DEBUG).
+ *
+ * Usage examples:
+ *   zz_err("Failed to open file: %s", filename);     // Always shown
+ *   zz_info("Starting packet capture");              // Shown with -v or higher
+ *   zz_warn("Interface not in monitor mode");        // Shown with -vv or higher
+ *   zz_debug("Processing packet #%d", count);        // Shown with -vvv or higher
+ *   zz_trace("Entering function %s", __func__);      // Shown with -vvvv only
+ */
+#define zz_err(format, ...)   zz_print(ERR,   1, format, ##__VA_ARGS__)
+#define zz_info(format, ...)  zz_print(INFO,  (zz->setup.log_level >= ZZ_LOG_INFO),  format, ##__VA_ARGS__)
+#define zz_warn(format, ...)  zz_print(WARN,  (zz->setup.log_level >= ZZ_LOG_WARN),  format, ##__VA_ARGS__)
+#define zz_debug(format, ...) zz_print(DEBUG, (zz->setup.log_level >= ZZ_LOG_DEBUG), format, ##__VA_ARGS__)
+#define zz_trace(format, ...) zz_print(TRACE, (zz->setup.log_level >= ZZ_LOG_TRACE), format, ##__VA_ARGS__)
+
+/* Legacy alias for backward compatibility (zz_out is now zz_info) */
+#define zz_out(format, ...) zz_info(format, ##__VA_ARGS__)
+
+/* Legacy alias for backward compatibility (zz_log is now zz_debug) */
+#define zz_log(format, ...) zz_debug(format, ##__VA_ARGS__)
 
 /* Print command-line usage information */
 void zz_print_usage(void);
