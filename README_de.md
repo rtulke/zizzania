@@ -1,5 +1,7 @@
 # AirSnare (ehemals zizzania)
 
+[English version](README.md)
+
 AirSnare überwacht drahtlosen Netzwerkverkehr, sucht gezielt nach WPA-/WPA2-Handshakes und speichert nur die Frames, die für eine spätere Entschlüsselung nötig sind (ein Beacon, die EAPOL-Sequenz und relevante Datenframes). Um den Prozess zu beschleunigen, kann AirSnare IEEE 802.11 Deauthentication-Frames an ausgewählte Stationen senden, verwaltet Retransmits/Reassociations automatisch und begrenzt die Anzahl der gesendeten Frames pro Client.
 
 ![Screenshot](https://i.imgur.com/zGxPSTE.png)
@@ -131,6 +133,7 @@ src/
 |-- members.c/h             # MAC-Listen (Whitelist/Blacklist)
 |
 |-- ieee802.c/h             # Protokolldefinitionen
+|-- config.c/h              # Konfiguration laden & Prioritäten
 |-- options.c/h             # CLI & Konfig-Zusammenführung
 |-- terminal.c/h            # Ausgabe & Statistiken
 |-- util.c/h                # Privileg-Themen

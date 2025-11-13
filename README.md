@@ -1,5 +1,7 @@
 # AirSnare (formerly zizzania)
 
+[Deutsche Version](README_de.md)
+
 AirSnare sniffs wireless traffic listening for WPA handshakes and dumping only those frames suitable to be decrypted (one beacon + EAPOL frames + data). In order to speed up the process, AirSnare sends IEEE 802.11 DeAuth frames to the stations whose handshake is needed, properly handling retransmissions and reassociations and trying to limit the number of DeAuth frames sent to each station.
 
 ![Screenshot](https://i.imgur.com/zGxPSTE.png)
@@ -62,47 +64,47 @@ make uninstall
 
 ### Configuration
 
-AirSnare liest Konfigurationsdateien **vor** den CLI-Argumenten ein, wobei jede Quelle die vorherige überschreibt:
+AirSnare reads configuration files **before** parsing CLI arguments, with later sources overriding earlier ones:
 
-1. `/etc/airsnare.conf` (systemweit, optional)
-2. `~/.airsnarerc` (benutzerspezifisch, optional)
-3. Jede Datei, die über `--config <pfad>` angegeben wird (kann mehrfach verwendet werden)
-4. Kommandozeilenargumente (höchste Priorität)
+1. `/etc/airsnare.conf` (system-wide, optional)
+2. `~/.airsnarerc` (per-user, optional)
+3. Any file passed via `--config <path>` (can be repeated)
+4. Command-line arguments (highest priority)
 
-Das Format ist bewusst schlicht gehalten (`schlüssel = wert` pro Zeile, Kommentare via `#` oder `;`). Beispielwerte findest du in `airsnare.conf.example`. Pfade verstehen `~`, Strings können optional in `'` oder `"` gesetzt werden.
+Files use a minimal `key = value` syntax (`#`/`;` comments, optional `'`/`"` quotes). Sample values live in `airsnare.conf.example`. `~` expands to `$HOME`.
 
-**Verfügbare Schlüssel**
+**Supported keys**
 
-| Schlüssel | Typ | Beschreibung / CLI-Entsprechung |
-|-----------|-----|----------------------------------|
-| `interface`, `input` | string | Live-Interface (entspricht `-i`) |
-| `pcap`, `input_file` | string | Pcap-Datei statt Interface (`-r`) |
-| `output`, `write_file` | string | Ausgabedatei (`-w`) |
-| `channel` | int | Kanal (`-c`) |
-| `no_rfmon` | bool | RFMON-Setup überspringen (`-M`) |
-| `passive` | bool | Passives Sniffing (`-n`) |
-| `deauth_count` | int | Frames pro Burst (`-d`) |
-| `deauth_attempts` | int | Max. Versuche (`-a`) |
-| `deauth_interval` | int | Sekunden zwischen Bursts (`-t`) |
-| `dump_group_traffic` | bool | Broadcast/Mcast mitschreiben (`-g`) |
-| `early_quit` | bool | Nach erstem Handshake beenden (`-q`) |
-| `max_handshake` | int 2-4 | Anzahl Handshake-Messages (`-2`/`-3`/Default 4) |
-| `bssid_include` / `bssid_exclude` | csv | Liste von MAC-/Maskenfiltern (`-b`/`-B`) |
-| `station_include` / `station_exclude` | csv | Stationsfilter (`-s`/`-S`) |
-| `bssid_exclude_first` / `station_exclude_first` | bool | Reihenfolge für Filter (`-x b` / `-x s`) |
-| `log_level` | string/int | `error`, `info`, `warn`, `debug`, `trace` oder `0-4` (CLI: `-v` mehrfach) |
+| Key | Type | Description / CLI equivalent |
+|-----|------|------------------------------|
+| `interface`, `input` | string | Live interface (`-i`) |
+| `pcap`, `input_file`, `read_file` | string | Input pcap (`-r`) |
+| `output`, `write_file` | string | Output file (`-w`) |
+| `channel` | int | Wi-Fi channel (`-c`) |
+| `no_rfmon` | bool | Skip RFMON setup (`-M`) |
+| `passive` | bool | Passive mode (`-n`) |
+| `deauth_count` | int | Frames per burst (`-d`) |
+| `deauth_attempts` | int | Max attempts (`-a`) |
+| `deauth_interval` | int | Seconds between bursts (`-t`) |
+| `dump_group_traffic` | bool | Keep broadcast/multicast (`-g`) |
+| `early_quit` | bool | Stop after first handshake (`-q`) |
+| `max_handshake` | int 2-4 | Required handshake messages (`-2` / `-3`) |
+| `bssid_include` / `bssid_exclude` | csv | MAC/mask filters (`-b`/`-B`) |
+| `station_include` / `station_exclude` | csv | Station filters (`-s`/`-S`) |
+| `bssid_exclude_first` / `station_exclude_first` | bool | Filter order (`-x b` / `-x s`) |
+| `log_level` | string/int | `error`…`trace` or `0-4` (`-v`) |
 
-CSV-Felder nehmen Komma-getrennte Einträge wie `AA:BB:.../ff:ff:...`. Booleans akzeptieren `true/false`, `yes/no`, `on/off`, `0/1`. Ungültige Einträge werden mit Dateiname+Zeile gemeldet und stoppen das Einlesen der betroffenen Datei.
+CSV values accept comma-separated entries like `AA:BB:.../ff:ff:...`. Boolean parsing understands `true/false`, `yes/no`, `on/off`, `0/1`. Invalid entries report filename + line number and abort that file.
 
-**Schnellstart**
+**Quick start**
 
 ```
 cp airsnare.conf.example ~/.airsnarerc
-vim ~/.airsnarerc   # oder Editor deiner Wahl
+$EDITOR ~/.airsnarerc
 ./src/airsnare --config ~/.airsnarerc -n
 ```
 
-So lässt sich ein Projektprofil pflegen und trotzdem einzelne Flags (z.B. `-n`, `-v`) zur Laufzeit überschreiben.
+This keeps reusable profiles while still allowing ad-hoc CLI overrides (e.g., `-n`, `-v`).
 
 ## macOS support
 
@@ -131,6 +133,7 @@ src/
 |-- members.c/h             # MAC address sets - whitelist/blacklist with subnet mask support
 |
 |-- ieee802.c/h             # IEEE 802.11 protocol - frame structures, EAPOL, MAC utilities
+|-- config.c/h              # Configuration loader - layered file parsing and defaults
 |-- options.c/h             # Command-line parsing - argument validation and configuration
 |-- terminal.c/h            # Terminal output - ANSI colors, logging, statistics display
 |-- util.c/h                # Privilege management - setuid/setgid for dropping root
