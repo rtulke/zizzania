@@ -6,6 +6,16 @@ AirSnare sniffs wireless traffic listening for WPA handshakes and dumping only t
 
 ![Screenshot](https://i.imgur.com/zGxPSTE.png)
 
+## AirSnare vs. zizzania
+
+The original [zizzania](https://github.com/cyrus-and/zizzania) project has been effectively unmaintained for years—no releases, no bug fixes, and several rough edges when used on current Linux/macOS systems. AirSnare keeps the proven capture core but modernizes everything around it:
+
+- Safer runtime: asserts replaced with error handling, killer-pipe race fixes, pooled allocations for clients/BSS/targets.
+- Better ergonomics: layered config files, refactored option parsing, richer terminal output, log levels, macOS-specific notes.
+- Performance/UX improvements: dissect/handshake refactors, Bloom-filtered hash tables, memory pools, passive/live guard rails.
+
+AirSnare also works hand-in-hand with [AirJack](https://github.com/rtulke/AirJack): AirJack handles CoreWLAN scanning, channel setting, RFMON toggles, capture orchestration, and optional cracking, while AirSnare delivers a lean libpcap backend for fast/accurate handshake capture. Together you get a single workflow (`./airjack`) that discovers networks, sets the correct channel, launches AirSnare with the right filters, and feeds the resulting capture straight into hcxpcapngtool/hashcat.
+
 ## Examples
 
 Put the network interface in RFMON mode on channel 6 and save the traffic gathered from the stations associated to a specific access point excluding those whose MAC address starts with `00:11:22`:

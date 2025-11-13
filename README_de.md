@@ -6,6 +6,16 @@ AirSnare überwacht drahtlosen Netzwerkverkehr, sucht gezielt nach WPA-/WPA2-Han
 
 ![Screenshot](https://i.imgur.com/zGxPSTE.png)
 
+## AirSnare vs. zizzania
+
+Das ursprüngliche [zizzania](https://github.com/cyrus-and/zizzania)-Projekt wird seit Jahren nicht mehr gepflegt – keine neuen Releases, keine Bugfixes und etliche Ecken/Kanten auf modernen Linux- oder macOS-Versionen. AirSnare übernimmt den bewährten Kern, hebt den Rest aber auf ein aktuelles Niveau:
+
+- Stabilerer Betrieb: assert()-Aufräumarbeiten, Fehlerbehandlung für Killer-Pipe, Memory-Pools für Clients/BSS/Targets.
+- Bessere Bedienbarkeit: gestapelte Konfigurationsdateien, aufgeräumtes Option-Parsing, klareres Terminal-UI, Log-Level-System, aktualisierte Plattform-Hinweise.
+- Performance & UX: entschlackte Dissector-/Handshake-Pfade, Bloom-Filter in den Hash-Tabellen, Schutzgeländer für passive/live Modi.
+
+AirSnare harmoniert zudem perfekt mit [AirJack](https://github.com/rtulke/AirJack): AirJack übernimmt Scan, Kanalwahl, RFMON-Toggle, Capture-Orchestrierung und optional das Cracking, während AirSnare als schlanker libpcap-Backenddienst agiert. Ergebnis: Ein einziger Workflow (`./airjack`), der Netzwerke findet, das Interface korrekt setzt, AirSnare mit passenden Filtern startet und den Capture direkt an hcxpcapngtool bzw. hashcat weiterreicht.
+
 ## Beispiele
 
 Interface in den RFMON-Modus auf Kanal 6 versetzen und nur den Verkehr der Stationen eines bestimmten Access Points mitschneiden (MACs beginnend mit `00:11:22` werden dabei ausgeschlossen):
