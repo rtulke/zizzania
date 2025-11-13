@@ -17,6 +17,12 @@
 #include "members.h"
 #include "bsss.h"
 
+/* Default configuration values */
+#define ZZ_DEFAULT_MAX_HANDSHAKE    4
+#define ZZ_DEFAULT_N_DEAUTHS        1
+#define ZZ_DEFAULT_KILLER_ATTEMPTS 10
+#define ZZ_DEFAULT_KILLER_INTERVAL  5
+
 /* Size of error message buffer (includes space for pcap errors) */
 #define ZZ_ERROR_BUFFER_SIZE (1024 + PCAP_ERRBUF_SIZE)
 
@@ -53,6 +59,10 @@ typedef struct zz_handler {
         zz_members included_stations;     /* Stations to include (whitelist) */
         zz_members excluded_stations;     /* Stations to exclude (blacklist) */
     } setup;
+
+    /* Owned strings created by configuration files (freed on reset/finalize) */
+    char *config_input_owned;
+    char *config_output_owned;
 
     double epoch;  /* Timestamp of first packet (used for relative time display) */
 

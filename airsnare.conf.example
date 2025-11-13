@@ -1,0 +1,26 @@
+# Example AirSnare configuration file
+
+# Interface configuration
+interface = wlan0
+channel = 6
+no_rfmon = false
+passive = false
+
+# Output settings
+output = ~/captures/airsnare-handshakes.pcap
+dump_group_traffic = true
+early_quit = false
+
+# Deauthentication tuning
+deauth_count = 5
+deauth_attempts = 8
+deauth_interval = 10
+
+# Handshake handling
+max_handshake = 3
+bssid_include = AA:BB:CC:DD:EE:FF/ff:ff:ff:00:00:00
+station_exclude = 00:11:22:33:44:55
+station_exclude_first = true
+
+# Logging
+log_level = debug

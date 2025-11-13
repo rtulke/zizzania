@@ -22,12 +22,14 @@
 void zz_print_usage(void) {
     #define LN(x) x "\n"
     fprintf(stderr,
-            LN("zizzania v" ZZ_VERSION " - " ZZ_DESCRIPTION)
+            LN("AirSnare v" ZZ_VERSION " - " ZZ_DESCRIPTION)
             LN("Copyright (c) " ZZ_YEAR " " ZZ_AUTHOR)
             LN("")
             LN("Usage:")
             LN("")
-            LN("    zizzania (-r <file> | -i <device> [-M] [-c <channel>] [-q]")
+            LN("    --config <file>  Load settings from configuration file")
+            LN("")
+            LN("    airsnare (-r <file> | -i <device> [-M] [-c <channel>] [-q]")
             LN("              (-n | [-d <count>] [-a <count>] [-t <seconds>]))")
             LN("             [-b <match>...] [-B <match>...] [-x b]")
             LN("             [-s <match>...] [-S <match>...] [-x s]")
@@ -56,7 +58,7 @@ void zz_print_usage(void) {
             LN("")
             LN("Example:")
             LN("")
-            LN("    zizzania -i wlan0 -c 1 -b ac:1d:1f:1e:dd:ad/ff:ff:ff:00:00:00 -w out.pcap")
+            LN("    airsnare -i wlan0 -c 1 -b ac:1d:1f:1e:dd:ad/ff:ff:ff:00:00:00 -w out.pcap")
             LN(""));
     #undef LN
 }

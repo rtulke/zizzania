@@ -8,7 +8,7 @@
 #ifndef ZZ_RELEASE_H
 #define ZZ_RELEASE_H
 
-/* Current version number of zizzania */
+/* Current version number of AirSnare */
 #define ZZ_VERSION "0.3.0"
 
 /* Brief description of the tool's primary functionality */

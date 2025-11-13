@@ -291,14 +291,14 @@ int zz_initialize(zz_handler *zz) {
     /* Set default configuration values */
 
     /* Require full 4-way handshake by default */
-    zz->setup.max_handshake = 4;
+    zz->setup.max_handshake = ZZ_DEFAULT_MAX_HANDSHAKE;
 
     /* Send one deauth frame at a time by default */
-    zz->setup.n_deauths = 1;
+    zz->setup.n_deauths = ZZ_DEFAULT_N_DEAUTHS;
 
     /* Killer timing defaults */
-    zz->setup.killer_max_attempts = 10;  /* Try up to 10 times */
-    zz->setup.killer_interval = 5;       /* 5 seconds between attempts */
+    zz->setup.killer_max_attempts = ZZ_DEFAULT_KILLER_ATTEMPTS;  /* Try up to 10 times */
+    zz->setup.killer_interval = ZZ_DEFAULT_KILLER_INTERVAL;      /* 5 seconds between attempts */
 
     return 1;
 }
@@ -448,6 +448,12 @@ int zz_finalize(zz_handler *zz) {
         pcap_close(zz->pcap);
         zz->pcap = NULL;
     }
+
+    /* Free config-owned strings */
+    free(zz->config_input_owned);
+    zz->config_input_owned = NULL;
+    free(zz->config_output_owned);
+    zz->config_output_owned = NULL;
 
     return 1;
 }

@@ -14,8 +14,13 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "handler.h"
 #include "log.h"
+
+enum {
+    OPT_CONFIG = 1000
+};
 
 /*
  * Parse a string as a natural number (positive integer).
@@ -109,26 +114,44 @@ static int parse_mac_filter_option(zz_handler *zz, int option, const char *argum
  */
 int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
     int opt;
-    int n_inputs = 0;          /* Count of input sources specified */
-    int n_outputs = 0;         /* Count of output files specified */
+    int cli_inputs = 0;        /* Count of CLI input specifications */
+    int cli_outputs = 0;       /* Count of CLI output specifications */
     int max_handshake_2 = 0;   /* Flag for -2 option */
     int max_handshake_3 = 0;   /* Flag for -3 option */
-    int n_deauths = 0;         /* Flag for -d option */
-    int killer_max_attempts = 0;  /* Flag for -a option */
-    int killer_interval = 0;   /* Flag for -t option */
+    static const struct option long_options[] = {
+        { "config", required_argument, NULL, OPT_CONFIG },
+        { 0, 0, 0, 0 }
+    };
 
     /* Disable getopt's built-in error messages - we handle them ourselves */
     opterr = 0;
 
+    /* Apply default configuration files (system first, then user) */
+    if (!zz_config_load(zz, ZZ_CONFIG_SYSTEM_PATH, 1)) {
+        return 0;
+    }
+    if (!zz_config_load(zz, ZZ_CONFIG_USER_PATH, 1)) {
+        return 0;
+    }
+
     /* Parse all options */
-    while (opt = getopt(argc, argv, ":i:Mc:nd:a:t:r:b:B:s:S:x:w:23gqv"), opt != -1) {
+    while ((opt = getopt_long(argc, argv,
+                              ":i:Mc:nd:a:t:r:b:B:s:S:x:w:23gqv",
+                              long_options, NULL)) != -1) {
         switch (opt) {
+
+        case OPT_CONFIG: /* Load explicit configuration file */
+            if (!zz_config_load(zz, optarg, 0)) {
+                return 0;
+            }
+            break;
 
         case 'i':  /* Live capture from interface */
         case 'r':  /* Read from pcap file */
+            cli_inputs++;
+            zz_config_reset_input(zz);
             zz->setup.input = optarg;
             zz->setup.is_live = (opt == 'i');
-            n_inputs++;
             break;
 
         case 'M':  /* Don't set monitor (RFMON) mode */
@@ -147,7 +170,6 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
             break;
 
         case 'd':  /* Number of deauth frames per burst */
-            n_deauths = 1;
             if (!parse_natural(optarg, &zz->setup.n_deauths)) {
                 zz_error(zz, "Invalid deauthentication count '%s'", optarg);
                 return 0;
@@ -155,7 +177,6 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
             break;
 
         case 'a':  /* Maximum deauth attempts before giving up */
-            killer_max_attempts = 1;
             if (!parse_natural(optarg, &zz->setup.killer_max_attempts)) {
                 zz_error(zz, "Invalid max deauthentication attempts '%s'", optarg);
                 return 0;
@@ -163,7 +184,6 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
             break;
 
         case 't':  /* Time between deauth attempts (seconds) */
-            killer_interval = 1;
             if (!parse_natural(optarg, &zz->setup.killer_interval)) {
                 zz_error(zz, "Invalid deauthentication interval '%s'", optarg);
                 return 0;
@@ -192,7 +212,7 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
 
         case 'w':  /* Write output to pcap file */
             zz->setup.output = optarg;
-            n_outputs++;
+            cli_outputs++;
             break;
 
         case '2':  /* Capture only first 2 handshake messages (enough for unicast) */
@@ -232,18 +252,18 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
 
     /* Validation phase: check for missing/conflicting options */
 
-    /* Must specify exactly one input source */
-    if (n_inputs == 0) {
+    /* Must specify at least one input source (config or CLI) */
+    if (!zz->setup.input) {
         zz_error(zz, "No input specified, use either -r or -i");
         return 0;
     }
-    if (n_inputs > 1) {
+    if (cli_inputs > 1) {
         zz_error(zz, "Multiple inputs specified");
         return 0;
     }
 
     /* Can specify at most one output file */
-    if (n_outputs > 1) {
+    if (cli_outputs > 1) {
         zz_error(zz, "Multiple outputs specified");
         return 0;
     }
@@ -255,16 +275,24 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
     }
 
     /* Live-only options can't be used with file input (-r) */
+    const int custom_n_deauths =
+        (zz->setup.n_deauths != ZZ_DEFAULT_N_DEAUTHS);
+    const int custom_killer_attempts =
+        (zz->setup.killer_max_attempts != ZZ_DEFAULT_KILLER_ATTEMPTS);
+    const int custom_killer_interval =
+        (zz->setup.killer_interval != ZZ_DEFAULT_KILLER_INTERVAL);
+    const int attack_options =
+        custom_n_deauths || custom_killer_attempts || custom_killer_interval;
+
     if (!zz->setup.is_live &&
         (zz->setup.no_rfmon || zz->setup.channel > 0 || zz->setup.is_passive ||
-         n_deauths || killer_max_attempts || killer_interval)) {
+         attack_options)) {
         zz_error(zz, "Options -M, -c, -n, -d, -a, -t require live capture (-i); cannot use with -r");
         return 0;
     }
 
     /* Attack-related options conflict with passive mode */
-    if (zz->setup.is_passive &&
-        (n_deauths || killer_max_attempts || killer_interval)) {
+    if (zz->setup.is_passive && attack_options) {
         zz_error(zz, "Options -d, -a, -t (deauth attacks) conflict with -n (passive mode)");
         return 0;
     }
@@ -276,7 +304,7 @@ int zz_parse_options(zz_handler *zz, int argc, char *argv[]) {
     }
 
     /* Group traffic dump option requires output file */
-    if (zz->setup.dump_group_traffic && n_outputs == 0) {
+    if (zz->setup.dump_group_traffic && !zz->setup.output) {
         zz_error(zz, "Option -g (dump group traffic) requires output file; add -w <file>");
         return 0;
     }

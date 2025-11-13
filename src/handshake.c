@@ -68,7 +68,7 @@ static int validate_replay_counter(const zz_client *client, unsigned handshake_i
 
 /*
  * Process a packet through the WPA handshake state machine.
- * This is the heart of zizzania's handshake tracking logic. It maintains
+ * This is the heart of AirSnare's handshake tracking logic. It maintains
  * per-client state and determines what actions should be taken based on
  * the packet type and current handshake progress.
  *

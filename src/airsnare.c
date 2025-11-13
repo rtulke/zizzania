@@ -1,5 +1,5 @@
 /*
- * zizzania.c - Main program entry point
+ * airsnare.c - Main program entry point
  *
  * Simple main function that orchestrates the program lifecycle:
  * initialize → parse options → start capture → print stats → finalize

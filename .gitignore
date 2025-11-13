@@ -2,6 +2,7 @@
 /external/
 /Makefile
 /src/zizzania
+/src/airsnare
 .ccls-cache/
 .gdb_history
 compile_commands.json
