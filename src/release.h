@@ -15,9 +15,9 @@
 #define ZZ_DESCRIPTION "Automated DeAuth attack"
 
 /* Author information */
-#define ZZ_AUTHOR "Andrea Cardaci <cyrus.and@gmail.com>"
+#define ZZ_AUTHOR "Robert Tulke <rt@debian.sh>"
 
 /* Copyright year */
-#define ZZ_YEAR "2023"
+#define ZZ_YEAR "2025"
 
 #endif

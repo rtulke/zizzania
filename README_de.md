@@ -2,7 +2,7 @@
 
 [English version](README.md)
 
-AirSnare überwacht drahtlosen Netzwerkverkehr, sucht gezielt nach WPA-/WPA2-Handshakes und speichert nur die Frames, die für eine spätere Entschlüsselung nötig sind (ein Beacon, die EAPOL-Sequenz und relevante Datenframes). Um den Prozess zu beschleunigen, kann AirSnare IEEE 802.11 Deauthentication-Frames an ausgewählte Stationen senden, verwaltet Retransmits/Reassociations automatisch und begrenzt die Anzahl der gesendeten Frames pro Client.
+AirSnare überwacht drahtlosen Netzwerkverkehr, sucht gezielt nach WPA-/WPA2-Handshakes und speichert nur die Frames, die für eine spätere Entschlüsselung nötig sind (ein Beacon, die EAPOL-Sequenz und relevante Datenframes). Um den Prozess zu beschleunigen, kann AirSnare IEEE 802.11 Deauthentication-Frames an ausgewählte Stationen senden, verwaltet Retransmits/Reassociations automatisch und begrenzt die Anzahl der gesendeten Frames pro Client. Seit 2025 wird das Projekt von Robert Tulke (<rt@debian.sh>) gepflegt und erweitert – aufbauend auf Andrea Cardacis ursprünglichem zizzania.
 
 ![Screenshot](https://i.imgur.com/zGxPSTE.png)
 
@@ -59,8 +59,9 @@ brew install libpcap wget
 ### Build
 
 ```
-make -f config.Makefile
-make
+make           # baut das optimierte Release (Standardziel)
+make debug     # baut mit -ggdb3/-Werror für Entwicklung
+make config    # aktualisiert das vendorte Makefile + uthash stub
 ```
 
 ### Installation
@@ -68,16 +69,11 @@ make
 AirSnare lässt sich direkt aus `src/` starten; Installation ist optional:
 
 ```
-make install
-make uninstall
+make install   INSTALL_PATH=/usr/local/bin   # kopiert src/airsnare dorthin
+make uninstall INSTALL_PATH=/usr/local/bin
 ```
 
-oder für macOS
-
-```
-sudo make install
-sudo make uninstall
-```
+`DESTDIR=/pfad/ins/package` hilft beim Paketbau; für Systempfade ggf. `sudo` verwenden.
 
 
 ## Konfiguration
