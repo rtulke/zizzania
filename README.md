@@ -72,6 +72,13 @@ make install
 make uninstall
 ```
 
+or for macOS
+
+```
+sudo make install
+sudo make uninstall
+```
+
 ### Configuration
 
 AirSnare reads configuration files **before** parsing CLI arguments, with later sources overriding earlier ones:
